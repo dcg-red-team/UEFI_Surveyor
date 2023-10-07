@@ -1,0 +1,22 @@
+GUIDS:
+  OUTPUT: UEFISurveyor
+  COMBINED: False
+  INPUT:
+    EDK:
+      TYPE: DEC
+      PATH: "Path to edk2"
+      OPTIONS: [
+      ]
+    EDK2 Platforms:
+      TYPE: DEC
+      PATH: "Path to edk2-platforms"
+      OPTIONS: [
+      ]
+    UEFITOOL:
+      TYPE: UEFITool
+      PATH: "Path to UEFITool guids.csv file"
+      OPTIONS: []
+    GUIDDB:
+      TYPE: EFISeek
+      PATH: "Path to EFISeek guids-db.ini file"
+      OPTIONS: []

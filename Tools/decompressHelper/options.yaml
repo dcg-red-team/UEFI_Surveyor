@@ -1,0 +1,18 @@
+Decompress:
+  Program:
+    UEFIExtract:
+      Type: UEFIExtract
+      Path: 'Path to uefiextract'
+    CHIPSEC:
+      Type: CHIPSEC
+      Path: 'Path to chipsec'
+  Python: 'Python Executable'
+  Destination: 'Path to write binaries into'
+  Binary:
+    Files: [
+      'Path to standalone binary files'
+    ]
+    Folders: [
+      'Path to folder containing flash images'
+    ]
+  Compare: True

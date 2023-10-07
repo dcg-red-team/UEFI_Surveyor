@@ -1,0 +1,47 @@
+ARCH:
+  X64
+
+HEADERS:
+  EDK2:
+    PATH: "Path to edk2"
+    PKGS: [ # Packages to include
+      MdePkg,
+      MdeModulePkg,
+      PrmPkg,
+      SecurityPkg,
+      DynamicTablesPkg,
+      SignedCapsulePkg,
+      StandaloneMmPkg
+    ]
+  EDK2 Platforms:
+    PATH: "Path to edk2-platforms/Platform/Intel"
+    PKGS: [ # Packages to include
+      MinPlatformPkg
+    ]
+
+  EDK2 Platforms Silicon:
+    TYPE: DEC
+    PATH: "Path to edk2-platforms/Silicon/Intel"
+    PKGS: [ # Packages to include
+      IntelSiliconPkg
+    ]
+REQUIRED:
+  MdePkg:
+    Include: [
+      Uefi: [
+        UefiBaseType.h,
+        UefiSpec.h
+      ],
+      PiDxe.h,
+      PiMm.h,
+      PiPei.h,
+      PiSmm.h,
+      Library: [
+        DxeCoreEntryPoint.h,
+        PeiCoreEntryPoint.h,
+        PeimEntryPoint.h,
+        StandaloneMmDriverEntryPoint.h,
+        UefiApplicationEntryPoint.h,
+        UefiDriverEntrypoint.h
+      ]
+    ]
