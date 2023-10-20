@@ -18,7 +18,7 @@ from collections import namedtuple
 import yaml
 
 
-surveyorOptions = namedtuple("UEFISurveyor_Options", ['ghidraPath', 'ghidraProject', 'scriptPath', 'guidDBPath', 'gdtPath64', 'gdtPath32', 'projectName', 'efiPath'])
+surveyorOptions = namedtuple("surveyorOptions", ['ghidraPath', 'ghidraProject', 'scriptPath', 'guidDBPath', 'gdtPath64', 'gdtPath32', 'projectName', 'efiPath'])
 
 
 def loadOptions(filename='options.yaml') -> dict:
