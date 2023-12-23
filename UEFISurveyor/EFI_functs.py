@@ -14,15 +14,19 @@
 #
 # @category UEFISurveyor.internal
 
-from copy import deepcopy
 from artifacts import artifacts
-from ghidra_funcs import varnodeConverter, GhidraUtils
-from ghidra.program.model.pcode import PcodeOp
-
 from guids import convertGuidStr, guids
+from ghidra_funcs import varnodeConverter, GhidraUtils
+from hash import fnHashes
+
+from ghidra.program.model.pcode import PcodeOp
 from ghidra.program.model.mem import MemoryAccessException
 from ghidra.program.model.address import AddressSpace
 from ghidra.program.model.data import UnicodeDataType
+from ghidra.program.model.listing import ParameterImpl
+from ghidra.feature.fid.service import FidService
+import ghidra.program.model.symbol.SourceType as SourceType
+
 
 from uuid import UUID
 import struct
@@ -33,12 +37,22 @@ class EFIUtils(GhidraUtils):
     def __init__(self, currentProgram):
         super(EFIUtils, self).__init__(currentProgram)
 
-    def labelModuleEntryPoints(self, eps):
+    def labelModuleEntryPoints(self, eps, isStandAloneMm=False):
         # update list of passed in addresses to ModuleEntryPoint
         dtm = self.currentProgram.getDataTypeManager()
         epType = dtm.getDataType("/UefiApplicationEntryPoint.h/functions/_ModuleEntryPoint")
+        parameters = None
+        if isStandAloneMm:
+            parameterDefinitions = epType.getArguments()
+            parameters = []
+            for d in parameterDefinitions:
+                if d.getName() == 'SystemTable':
+                    mm_st = dtm.getDataType('/PiMMCis.h/EFI_MM_SYSTEM_TABLE *')
+                    parameters.append(ParameterImpl(d.getName(), mm_st, self.currentProgram))
+                else:
+                    parameters.append(ParameterImpl(d.getName(), d.getDataType(), self.currentProgram))
         for index, entrypoint in enumerate(eps):
-            self.updateFunctionDefinition(entrypoint, epType, "ModuleEntryPoint-{:d}".format(index))
+            self.updateFunctionDefinition(entrypoint, epType, "ModuleEntryPoint-{:d}".format(index), parameters)
 
     def findGlobalEfiPointers(self, func):
         # Identify instances of gST, gBS, EFI System Table, Image Handle
@@ -56,6 +70,10 @@ class EFIUtils(GhidraUtils):
                     name = self.getNextLabel('gRT')
                 elif varname == "EFI_HANDLE":
                     name = self.getNextLabel('gImageHandle')
+                elif varname == "EFI_MM_SYSTEM_TABLE *":
+                    name = self.getNextLabel('gSmst')
+                elif varname == "EFI_DXE_SERVICES *":
+                    name = self.getNextLabel('gDS')
                 else:
                     name = None
                 if name is not None:
@@ -90,7 +108,7 @@ class EFIUtils(GhidraUtils):
                                     pcodeitrCopy.next()
                                 else:
                                     continue
-                                self.propogateLocal(pcodeitrCopy, varnodeConverter(pcode.getInput(3)))
+                            self.propogateLocal(pcodeitrCopy, varnodeConverter(pcode.getInput(3)))
                     elif pcode.getInput(0).getHigh().getDataType().getName() == "EFI_INSTALL_PROTOCOL_INTERFACE":
                         self.installProtocol(pcode, 'gBS')
                 counter += 1
@@ -149,7 +167,14 @@ class EFIUtils(GhidraUtils):
                       "EFI_SMM_USB_REGISTER2",
                       "EFI_SMM_IO_TRAP_DISPATCH2_REGISTER",
                       "EFI_SMM_GPI_REGISTER2",
-                      "EFI_MM__SW_REGISTER"]
+                      "EFI_MM_POWER_BUTTON_REGISTER",
+                      "EFI_MM_STANDBY_BUTTON_REGISTER",
+                      "EFI_MM_SX_REGISTER",
+                      "EFI_MM_SW_REGISTER",
+                      "EFI_MM_PERIODIC_TIMER_REGISTER",
+                      "EFI_MM_USB_REGISTER",
+                      "EFI_MM_IO_TRAP_DISPATCH_REGISTER",
+                      "EFI_MM_GPI_REGISTER",]
         symbolName = "gSmst"
         refs = self.getSymbolRefs(symbolName)
         gbsFuncs = self.getUniqueFuncts(refs)
@@ -165,10 +190,10 @@ class EFIUtils(GhidraUtils):
                 if pcode.getOpcode() == PcodeOp.CALLIND:
                     if pcode.getInput(0).getHigh().getDataType().getName() in toRegister:
                         self.register2Handler(pcode, counter)
-                    elif pcode.getInput(0).getHigh().getDataType().getName() == "EFI_SMM_INTERRUPT_REGISTER":
+                    elif pcode.getInput(0).getHigh().getDataType().getName() in ["EFI_SMM_INTERRUPT_REGISTER", "EFI_MM_INTERRUPT_REGISTER"]:
                         self.register2Handler(pcode)
                         self.labelVarnodeGuid(varnodeConverter(pcode.getInput(pcode.getNumInputs()-2)))
-                    elif pcode.getInput(0).getHigh().getDataType().getName() == "EFI_SMM_REGISTER_PROTOCOL_NOTIFY":
+                    elif pcode.getInput(0).getHigh().getDataType().getName() in ["EFI_SMM_REGISTER_PROTOCOL_NOTIFY", "EFI_MM_REGISTER_PROTOCOL_NOTIFY"]:
                         self.labelVarnodeGuid(varnodeConverter(pcode.getInput(pcode.getNumInputs()-3)))
                         self.registerNotify(pcode)
                     elif pcode.getInput(0).getHigh().getDataType().getName() == "EFI_INSTALL_PROTOCOL_INTERFACE":
@@ -211,7 +236,24 @@ class EFIUtils(GhidraUtils):
             protoType = None
             protoName, protoType = self.nameToProto(guidName, True)
             if protoName is None:
-                protoName = "unknown_{}".format(guidName[:-5])
+                # check to see if there is a non pointer version of the datatype
+                protoName, protoType = self.nameToProto(guidName, True, False)
+                if protoName is not None:
+                    # check to see if already created
+                    tmp, protoType = self.nameToProto(protoName, False)
+                    if tmp:
+                        protoName = tmp
+                    else:
+                        # Create a ptr version of the datatype
+                        print('creating datatype')
+                        if protoName.startswith('_'):
+                            protoName = protoName[1:]
+                        self.createDataType(protoName)
+                        protoName, protoType = self.nameToProto(protoName, False)
+                if protoType is None:
+                    print('unable to find datatype')
+                    dtm = self.currentProgram.getDataTypeManager()
+                    protoName = "unknown_{}".format(guidName[:-5])
             self.labelvarNode(protoVar, protoName, protoType, origin)
             # if protoVar is local need to propogate locally
             if protoVar.isLocal():
@@ -227,26 +269,32 @@ class EFIUtils(GhidraUtils):
             pcode = pcodeitr.next()
             for num in range(pcode.getNumInputs()):
                 try:
+                    if pcode.getOutput():
+                        tmp = varnodeConverter(pcode.getOutput())
+                        if lvarnode.offset == tmp.offset:
+                            return
                     if lvarnode.offset == varnodeConverter(pcode.getInput(num)).offset:
                         if pcode.getOpcode() == PcodeOp.CALLIND:
                             return
                         if pcode.getOpcode() == PcodeOp.LOAD:
                             tmp = varnodeConverter(pcode.getOutput())
-                            if tmp.isGlobal() and not artifacts().has_label(toAddr(tmp.offset)):
+                            if tmp.isGlobal() and not artifacts().has_label(self.toAddr(tmp.offset)):
                                 tmp.labelvarNode("fromGBS", None)
                         if pcode.getOpcode() == PcodeOp.COPY:
                             tmp = varnodeConverter(pcode.getOutput())
-                            if tmp.isGlobal() and not artifacts().has_label(toAddr(tmp.offset)):
+                            if tmp.isGlobal() and not artifacts().has_label(self.toAddr(tmp.offset)):
                                 tmp.labelvarNode("fromGBS", None)
                         if pcode.getOpcode() == PcodeOp.INDIRECT:
                             tmp = varnodeConverter(pcode.getOutput())
-                            if tmp.isGlobal() and not artifacts().has_label(toAddr(tmp.offset)):
+                            if tmp.isGlobal() and not artifacts().has_label(self.toAddr(tmp.offset)):
                                 tmp.labelvarNode("fromGBS", None)
-                except:
+                except Exception as e:
                     print('Unable to propgate local')
+                    print(e)
+                    continue
 
     def getContextValue(self, vnode, inpcode, counter):
-        # Get the context value of the Handler registered with EFI_SMM_SW_REGISTER2
+        # Get the context value of the Handler registered with EFI_SMM_SW_REGISTER2/EFI_MM_SW_REGISTER
         # vnode - pcode instance
         # inpcode - pcode where instance is contained
         # counter - number of iterations to attempt looking for the context value
@@ -274,13 +322,13 @@ class EFIUtils(GhidraUtils):
         # counter - number of iterations to attempt looking for context value
         dtm = self.currentProgram.getDataTypeManager()
         tname = pcode.getInput(0).getHigh().getDataType().getName()
-        if pcode.getInput(0).getHigh().getDataType().getName() == "EFI_SMM_SW_REGISTER2":
+        if pcode.getInput(0).getHigh().getDataType().getName() in ["EFI_SMM_SW_REGISTER2", "EFI_MM_SW_REGISTER"]:
             vnode = pcode.getInput(pcode.getNumInputs()-2)
             contextNumber = self.getContextValue(vnode, pcode, counter)
             if contextNumber is not None:
                 fname = "swSmiHandler_{:x}".format(contextNumber)
             else:
-                fname = "swSmi_unknown"
+                fname = "swSmiHandler_unknown"
         else:
             fname = self.getNextLabel("{}Handler".format(tname[8:-10].replace("_", "").replace("DISPATCH", "").lower()))
         vnode = varnodeConverter(pcode.getInput(pcode.getNumInputs()-3))
@@ -528,3 +576,17 @@ class EFIUtils(GhidraUtils):
                         res = True
                         break
         return res
+
+    def labelFnHashes(self):
+        # Compare any hashes passed in by the user with the hashes in the file
+        # if a match is found relabel the function with the user's function name
+        mhash = fnHashes()
+        service = FidService()
+        funcMan = self.currentProgram.getFunctionManager()
+        for func in funcMan.getFunctions(True):
+            hf = service.hashFunction(func)
+            newName = mhash.getFuncName(hf)
+            if newName is not None:
+                print('createfunction', newName, func.getEntryPoint())
+                func.setName(newName, SourceType.USER_DEFINED)
+                artifacts().add_function(func.getEntryPoint(), newName)

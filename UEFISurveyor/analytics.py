@@ -14,12 +14,12 @@
 #
 # @category UEFISurveyor.internal
 
-import json
 from ghidra.app.decompiler.component import DecompilerUtils
+from ghidra.feature.fid.service import FidService
+from artifacts import artifacts
 from EFI_functs import EFIUtils
 from logger import logger
-from artifacts import artifacts
-from ghidra.feature.fid.service import FidService
+from hash import fnHashes
 
 
 class CallOuts:
@@ -41,7 +41,7 @@ class CallOuts:
         else:
             for (func, handler, path) in self.callouts:
                 logger().log("Potential Callout:")
-                logger().log('{} has callpath {} to {} with {}'.format(handler, path, func, self.name))
+                logger().log('{}:{} has callpath {} to {} with {}'.format(handler, handler.getEntryPoint(), path, func, self.name))
 
 
 class EFIAnalytics(EFIUtils):
@@ -51,31 +51,31 @@ class EFIAnalytics(EFIUtils):
 
     def identifyCallouts(self):
         logger().log('Searching for potential callouts')
-        # Gather the functions that contain gBS and gRS
+        # Gather the functions that contain gBS and gRT
         refs = []
         gbsrefs = self.getSymbolRefs("gBS")
         refs.append(CallOuts('gBS', self.getUniqueFuncts(gbsrefs)))
 
-        grsrefs = self.getSymbolRefs("gRS")
-        refs.append(CallOuts('gRS', self.getUniqueFuncts(grsrefs)))
+        grtrefs = self.getSymbolRefs("gRT")
+        refs.append(CallOuts('gRT', self.getUniqueFuncts(grtrefs)))
 
         # Gather any artifacts that came from gRT or gBS
         for key in artifacts().protocols.keys():
             name, _, origin = artifacts().protocols[key]
-            if origin == 'gBS' and name not in ['gBS', 'gRS']:
+            if origin == 'gBS' and name not in ['gBS', 'gRT']:
                 globalrefs = self.getSymbolRefs(name, True)
                 refs.append(CallOuts(name, self.getUniqueFuncts(globalrefs)))
 
         # Enumerate the SMIHandlers
         # search for a callpath that goes to a function with the handler
         funcMan = self.currentProgram.getFunctionManager()
-        for func in [func for func in funcMan.getFunctions(True) if func.getName().find("Handler") >= 0]:
+        for func in [func for func in funcMan.getFunctions(True) if func.getName().find("swSmiHandler") >= 0]:
+            callList = self.getCallTreeNodes(func)
             for ref in refs:
                 for gfunc in ref.get_funcs():
-                    emptylist = []
-                    fnPath = self.isFunctionPath(func, [gfunc], emptylist)
-                    if fnPath:
-                        ref.add_callout(gfunc, func, fnPath)
+                    if gfunc in callList:
+                        path = self.getCallPath(func, gfunc, [])
+                        ref.add_callout(gfunc, func, path[::-1])
         for ref in refs:
             ref.log_results()
         logger().log('')
@@ -122,28 +122,10 @@ class EFIAnalytics(EFIUtils):
         logger().log('')
 
     def getFunctionHashes(self, programFile):
-        funcsDict = {}
+        mhash = fnHashes()
         service = FidService()
-        logger().log('Function Hashes')
         funcMan = self.currentProgram.getFunctionManager()
         for func in funcMan.getFunctions(True):
             hf = service.hashFunction(func)
-            if hf is None:
-                continue
-            logger().log('{} - {}'.format(func, hf))
-            name = func.getName()
-            if name in funcsDict:
-                name = self.getUniqueName(funcsDict.keys(), name)
-            funcsDict[name] = str(hf)
-        funcsJson = json.dumps(funcsDict, indent=4)
-        outfile = '{}.json'.format(programFile)
-        with open(outfile, 'w') as jsonout:
-            jsonout.write(funcsJson)
-
-    def getUniqueName(self, keys, name):
-        newname = name
-        for i in range(100):
-            newname = '{}_{:d}'.format(name, i)
-            if newname not in keys:
-                break
-        return newname
+            mhash.addHash(str(hf), func)
+        mhash.logHashes(programFile)

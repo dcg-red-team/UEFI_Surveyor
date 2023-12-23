@@ -1,0 +1,14 @@
+{
+   " FH: 68da000e474b87c8 (24) +6 XH: d385d649e562167d": "copyMem",
+   " FH: 9a9e0bc222987721 (11) +6 XH: a873727156b24ee7": "AllocateMem",
+   " FH: 2bc749fd7ffefe26 (80) +42 XH: 402dab5d314dce89": "EFI_ASSERT",
+   " FH: 2bd20e47bde3a4ee (8) +6 XH: 9bff6783dd08ff49": "EFI_Debug",
+   " FH: 6dbde947b9ecacd1 (20) +5 XH: c262221506753164": "FreePool",
+   " FH: 6c716be2bdd4963f (68) +38 XH: c8278def1e1a423f": "EFI_ASSERT_Error",
+   " FH: 8759e7743e8a2daa (13) +2 XH: fbe03877ed140a6e": "AllocateZeroPool",
+   " FH: 89b62a645f9c6d30 (47) +10 XH: 57054a421d27dcb1": "StrCpyS",
+   " FH: 9ae323ec75a3a074 (14) +5 XH: 14e633c3693bdaca": "freePool",
+   " FH: 3171dbce99d93210 (19) +4 XH: 8182eeb721818b35": "AllocateCopyPool",
+   " FH: af871061043ba23a (8) +0 XH: af871061043ba23a": "SetMem",
+   " FH: 9e6a13c304774602 (13) +2 XH: db05e503e8d224fc": "ZeroMem"
+}

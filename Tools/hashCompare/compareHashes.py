@@ -25,35 +25,89 @@ from typing import Tuple
 from copy import deepcopy
 
 
-def getDictionary(filename: str) -> dict:
+class GFunction:
+    def __init__(self, location, name, hash):
+        self.hash = hash
+        self.location = location
+        self.name = name
+
+    def isHash(self, inHash):
+        return self.hash == inHash
+
+    def __repr__(self):
+        ret = f'Name: {self.name}'
+        ret += f', Hash: {self.hash}'
+        return ret
+
+
+class GFunctionContainer:
+    def __init__(self, inDict):
+        self.matched = []
+        self.unmatched = []
+        self.parseDict(inDict)
+
+    def parseDict(self, inDict):
+        for key in inDict:
+            data = GFunction(key, inDict[key][0], inDict[key][1])
+            self.addGFunction(data)
+
+    def addGFunction(self, gFunction):
+        if gFunction not in self.unmatched and gFunction not in self.matched:
+            self.unmatched.append(gFunction)
+
+    def getMatched(self):
+        return self.matched
+
+    def getUnMatched(self):
+        return self.unmatched
+
+    def hasHash(self, inHash):
+        ret = False
+        for gFun in self.unmatched:
+            if gFun.isHash(inHash):
+                self.matched.append(gFun)
+                self.unmatched.remove(gFun)
+                ret = True
+                break
+        if not ret:
+            for gFun in self.matched:
+                if gFun in self.matched:
+                    if gFun.isHash(inHash):
+                        ret = True
+                        break
+        return ret
+
+
+def readFile(filename: str) -> dict:
     with open(filename, 'r') as f:
         contents = f.read()
     return json.loads(contents)
 
 
-def getDiff(seq1, seq2) -> Tuple[list, list]:
+def listDiff(seq1, seq2) -> Tuple[list, list]:
     diff = set(seq1).difference(set(seq2))
     diff2 = set(seq2).difference(set(seq1))
     return (list(diff), list(diff2))
 
 
-def getDf(j1: dict, j2: dict) -> dict:
+def funcDiff(container1, container2):
+    for something in container1.getUnMatched():
+        container2.hasHash(something.hash)
+    for something in container2.getMatched():
+        container1.hasHash(something.hash)
+
+
+def fileDiff(j1: GFunctionContainer, j2: GFunctionContainer) -> dict:
     res = {}
-    (diff, diff2) = getDiff(j1.keys(), j2.keys())
-    res['uniqueFunctions1'] = deepcopy(diff)
-    res['uniqueFunctions2'] = diff2
-    diff += diff2
-    res['mismatchedHashes'] = []
-    for key in j1.keys():
-        if key not in diff:
-            if j1[key] != j2[key]:
-                res['mismatchedHashes'].append(key)
+    funcDiff(j1, j2)
+    res['uniqueFunctions1'] = j1.getUnMatched()
+    res['uniqueFunctions2'] = j2.getUnMatched()
     return res
 
 
 def isMismatched(DFDict):
     ret = False
-    if DFDict['uniqueFunctions1'] or DFDict['uniqueFunctions2'] or DFDict['mismatchedHashes']:
+    if DFDict['uniqueFunctions1'] or DFDict['uniqueFunctions2']:
         ret = True
     return ret
 
@@ -64,7 +118,7 @@ def compareDirs(dirpath1, dirpath2):
                   if fnmatch(f.name, '*json')]
     json_files2 = [f.name for f in sorted(os.scandir(dirpath2), key=lambda x: x.name)
                    if fnmatch(f.name, '*json')]
-    diff, diff2 = getDiff(json_files, json_files2)
+    diff, diff2 = listDiff(json_files, json_files2)
     res['uniqueFiles1'] = deepcopy(diff)
     res['uniqueFiles2'] = diff2
     res['misMatchedFiles'] = []
@@ -82,13 +136,15 @@ def compareDirs(dirpath1, dirpath2):
 def writeHashFile(results):
     jfile = 'hashlog.json'
     with open(jfile, 'w') as jf:
-        jf.write(json.dumps(results, indent=4))
+        jf.write(json.dumps(results, indent=4, default=lambda __o: __o.__dict__))
 
 
 def compareFiles(filepath1, filepath2):
-    jsondata1 = getDictionary(filepath1)
-    jsondata2 = getDictionary(filepath2)
-    diff = getDf(jsondata1, jsondata2)
+    jsondata1 = readFile(filepath1)
+    file1Container = GFunctionContainer(jsondata1)
+    jsondata2 = readFile(filepath2)
+    file2Container = GFunctionContainer(jsondata2)
+    diff = fileDiff(file1Container, file2Container)
     return diff
 
 
@@ -110,7 +166,6 @@ if __name__ == '__main__':
 
     if len(sys.argv) > 1:
         args = parser.parse_args(sys.argv[1:])
-        print(args)
         res = args.func(args.arg1, args.arg2)
         writeHashFile(res)
     else:

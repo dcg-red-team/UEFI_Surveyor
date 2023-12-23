@@ -51,7 +51,7 @@ def getFileDetails(filename):
     dataType = None
     machineType = None
     with open(filename, 'rb') as f:
-        data = f.read(0x100)
+        data = f.read(0xfff)
         if b'VZ' in data:
             machine = data[2:4]
             dataType = 'TE'
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     logger().log("Starting UEFI Surveyor")
     alloptions = loadOptions(os.path.join('UEFISurveyor', 'options.yaml'))
     options = getGhidraOptions(alloptions)
-    proc_count = 3
+    proc_count = 4
     work = SimpleQueue()
     result = SimpleQueue()
     procs = []

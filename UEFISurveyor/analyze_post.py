@@ -17,11 +17,11 @@
 # @category UEFISurveyor.headless
 
 from ghidra.util.task import ConsoleTaskMonitor
-import ghidra.util.Msg as Msg
 from ghidra.program.disassemble import Disassembler
 from ghidra.app.plugin.core.analysis import AutoAnalysisManager
 
 
+from hash import fnHashes
 from logger import logger
 from artifacts import artifacts
 from guids import guids
@@ -32,13 +32,12 @@ import sys
 
 
 if __name__ == "__main__":
-    file = getProgramFile()
-    logger().enableLogFile('{}.log'.format(file))
-    logger().log("Attempting to Analyze {}".format(file))
+    fileName = getProgramFile().toString()
+    logger().enableLogFile('{}.log'.format(fileName))
+    logger().log("Attempting to Analyze {}".format(fileName))
 
     # initialize GhidraUtils class
     EFIUtil = EFIUtils(currentProgram)
-    EFIAnalytic = EFIAnalytics(currentProgram)
 
     # load guid file
     args = getScriptArgs()
@@ -49,6 +48,11 @@ if __name__ == "__main__":
         logger().log('Missing Guid DB file!')
         sys.exit()
     guids().loadGuidFile(guidFile)
+    if len(args) > 1:
+        hashFile = args[1]
+        fnHashes().loadHashFile(hashFile)
+    else:
+        logger().log('Missing Hash File')
 
     # label Guids with the file
     EFIUtil.labelGuids()
@@ -68,7 +72,7 @@ if __name__ == "__main__":
         AutoAnalysisManager.getAnalysisManager(currentProgram).waitForAnalysis(None, ctMon)
 
     # label entry points
-    EFIUtil.labelModuleEntryPoints(eps)
+    EFIUtil.labelModuleEntryPoints(eps, 'Standalone' in fileName)
 
     # propogate variables from entrypoint to find global tables
     propFuncs = []
@@ -88,8 +92,16 @@ if __name__ == "__main__":
     # label Management Mode handlers
     EFIUtil.identifySMSTHandlers()
 
+    # label Possible Functions
+    EFIUtil.labelPossibleUndefinedFunctions()
+
+    # Label Functions via Hashes
+    EFIUtil.labelFnHashes()
+
     # log what is found
     artifacts().logArtifacts()
+
+    EFIAnalytic = EFIAnalytics(currentProgram)
 
     # attempt to find callouts
     EFIAnalytic.identifyCallouts()
@@ -101,6 +113,6 @@ if __name__ == "__main__":
     EFIAnalytic.identifyVariableUses()
 
     # log the functions and hashes
-    EFIAnalytic.getFunctionHashes(file)
+    EFIAnalytic.getFunctionHashes(fileName)
 
     logger().closeLogFile()

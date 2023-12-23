@@ -42,7 +42,7 @@ def jsonKeystoUUID(inDict):
     return outDict
 
 
-class Guids(object):
+class Guids:
     """Class to hold UEFI GUIDs"""
     def __init__(self):
         self.guidDict = {}
