@@ -34,6 +34,7 @@ Analysis:
   EFIPath: 'Path where extracted binaries are located'
   GUIDDB: 'Path to guid_db file'
   GDT: 'Path to gdt file'
+  HashFile: 'Path to hashes.json'
 
 ```
 To run the tool within headless mode:
