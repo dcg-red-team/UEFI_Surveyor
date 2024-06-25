@@ -94,6 +94,7 @@ def runHeadless(options, job, results, worker):
             command.append("-postScript")
             command.append(os.path.join("UEFISurveyor", "analyze_post.py"))
             command.append(options.guidDBPath)
+            command.append(options.hashFile)
             command.append("-noanalysis")
             if dataType == 'TE':
                 command.append('-processor')

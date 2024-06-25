@@ -7,3 +7,4 @@ Analysis:
   GUIDDB: 'Path to guid database file'
   GDT64: 'Path to uefi_x64.gdt file'
   GDT32: 'Path to uefi_ia32.gdt file'
+  HashFile: 'Path to hashes.json file'

@@ -29,6 +29,9 @@ import java.io.File as File
 from ghidra.program.model.listing.Function import FunctionUpdateType
 import ghidra.program.model.data.DataTypeConflictHandler as ConflictHandler
 from ghidra.program.model.util import CodeUnitInsertionException
+from ghidra.app.util.cparser.C import CParser
+from ghidra.program.model.address import AddressSet
+from ghidra.program.model.block import IsolatedEntrySubModel
 
 from artifacts import artifacts
 
@@ -288,26 +291,57 @@ class GhidraUtils(FlatAPI):
             if index > 100:
                 return label
 
-    def isFunctionPath(self, start, goal, gSearchList=[], path=[]):
-        """Return paths if a function can be reach a list of functions"""
-        # start - initial function
-        # goal - function to find a path into
-        # gSearchList - functions searched
-        # path - list of functions in path
-        if not goal:
-            return []
-        if goal == start:
-            path.append([start])
-            return path
-        if start not in gSearchList:
-            gSearchList.append(start)
+    def getCallTreeNodes(self, start, depth=0, maxdepth=0, path=[]):
+        """Return CallTree of a Function"""
+        if depth < maxdepth and start not in path:
+            path.append(start)
             for called in start.getCalledFunctions(self.getMonitor()):
-                res = self.isFunctionPath(called, goal, gSearchList, [])
-                if res:
-                    for found in res:
-                        found.append(start)
-                        path.append(found)
+                path = self.getCallTreeNodes(called, depth + 1, maxdepth, path)
         return path
+
+    def getCallPath(self, start, end, seen=[]):
+        if start == end:
+            return [start]
+        res = []
+        if start not in seen:
+            seen.append(start)
+            for called in start.getCalledFunctions(self.getMonitor()):
+                res = self.getCallPath(called, end, seen)
+                if res:
+                    res.append(start)
+                    return res
+        return res
+
+    def labelPossibleUndefinedFunctions(self):
+        addrSet = AddressSet()
+        listing = self.currentProgram.getListing()
+
+        initer = listing.getInstructions(self.currentProgram.getMemory(), True)
+        while initer.hasNext():
+            instruct = initer.next()
+            addrSet.addRange(instruct.getMinAddress(), instruct.getMaxAddress())
+        fiter = listing.getFunctions(True)
+        while fiter.hasNext():
+            func = fiter.next()
+            addrSet.delete(func.getBody())
+
+        submodel = IsolatedEntrySubModel(self.currentProgram)
+        subIter = submodel.getCodeBlocksContaining(addrSet, self.getMonitor())
+        codeStarts = AddressSet()
+        while subIter.hasNext():
+            block = subIter.next()
+            deadStart = block.getFirstStartAddress()
+            codeStarts.add(deadStart)
+
+        for addr in codeStarts:
+            self.createFunction(addr.getMinAddress(), 'pFUN_{}'.format(addr.getMinAddress()))
+
+    def createDataType(self, dtName):
+        dtm = self.currentProgram.getDataTypeManager()
+        parser = CParser(dtm)
+        dtTxt = "typedef {}* {};".format(dtName, dtName)
+        newDT = parser.parse(dtTxt)
+        dtm.addDataType(newDT, None)
 
 
 class varnodeConverter(object):

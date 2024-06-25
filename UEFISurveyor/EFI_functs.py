@@ -511,7 +511,8 @@ class EFIUtils(GhidraUtils):
             pcode = pcodeitr.next()
             if pcode.getOpcode() == PcodeOp.CALLIND:
                 tname = pcode.getInput(0).getHigh().getDataType().getName()
-                if tname.find('ET_VARIABLE') > 0:
+                tfind = tname.find('ET_VARIABLE')
+                if tfind > 0 and tfind < 5:
                     if tname not in res.keys():
                         res[tname] = []
                     nnode = varnodeConverter(pcode.getInput(1))
@@ -534,7 +535,7 @@ class EFIUtils(GhidraUtils):
                         gguid = self.getSymbolAt(self.toAddr(gnode.offset))
                     else:
                         gguid = self.getLocalGuidValue(gnode)
-                    if tname.find('SET_VARIABLE') > 0:
+                    if tname.upper().find('SET_VARIABLE') > 0:
                         snode = varnodeConverter(pcode.getInput(4))
                         concreateSize = (pcode.getInput(4).getSpace() & AddressSpace.ID_TYPE_MASK) == AddressSpace.TYPE_CONSTANT
                         if snode.isGlobal():
@@ -542,7 +543,7 @@ class EFIUtils(GhidraUtils):
                         else:
                             ssize = self.getContextValue(pcode.getInput(4), pcode, counter)
                         res[tname].append((gname, gguid, ssize, concreateSize))
-                    elif tname.find('GET_VARIABLE') > 0:
+                    elif tname.upper().find('GET_VARIABLE') > 0:
                         rtchecked = False
                         if pcode.getOutput() is not None:
                             rnode = varnodeConverter(pcode.getOutput())
